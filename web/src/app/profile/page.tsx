@@ -20,7 +20,19 @@ export default function ProfilePage() {
   const [newLink, setNewLink] = useState("");
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { if (profile) setForm(profile); }, [profile]);
+  useEffect(() => {
+    if (profile) setForm({
+      name: profile.name || "",
+      title: profile.title || "",
+      bio: profile.bio || "",
+      skills: Array.isArray(profile.skills) ? profile.skills : [],
+      hourlyRateMin: profile.hourlyRateMin ?? 25,
+      hourlyRateMax: profile.hourlyRateMax ?? 100,
+      experience: profile.experience || "Intermediate",
+      categories: Array.isArray(profile.categories) ? profile.categories : [],
+      portfolioLinks: Array.isArray(profile.portfolioLinks) ? profile.portfolioLinks : [],
+    });
+  }, [profile]);
 
   const addSkill = () => {
     if (!newSkill.trim() || form.skills.some(s => s.name.toLowerCase() === newSkill.toLowerCase())) return;
