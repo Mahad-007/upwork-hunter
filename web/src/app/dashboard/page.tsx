@@ -1,129 +1,152 @@
 "use client";
-
 import { useStore } from "@/store/store";
-import { Briefcase, FileText, Star, TrendingUp, AlertCircle } from "lucide-react";
+import { BarChart3, FileText, Search, Target, TrendingUp, Clock, ArrowRight, Zap } from "lucide-react";
 import Link from "next/link";
+import { timeAgo } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { savedJobs, proposals, profile, scoreCache } = useStore();
+  const { savedJobs, proposals, scoreCache, activities } = useStore();
 
-  const applied = savedJobs.filter((j) => j.status === "applied");
-  const saved = savedJobs.filter((j) => j.status === "saved");
-  const rejected = savedJobs.filter((j) => j.status === "rejected");
-  const highMatch = savedJobs.filter((j) => (j.score || scoreCache[j.id] || 0) > 80);
+  const totalScanned = Object.keys(scoreCache).length;
+  const proposalCount = proposals.length;
+  const avgScore = totalScanned > 0 ? Math.round(Object.values(scoreCache).reduce((a, b) => a + b, 0) / totalScanned) : 0;
+  const appliedCount = savedJobs.filter(j => j.status === "applied").length;
+  const responseRate = proposalCount > 0 ? Math.round((proposals.filter(p => p.status === "replied").length / proposalCount) * 100) : 0;
 
-  const stats = [
-    { label: "Saved Jobs", value: saved.length, icon: Star, color: "text-yellow-400", bg: "bg-yellow-400/10" },
-    { label: "Applied", value: applied.length, icon: Briefcase, color: "text-green-400", bg: "bg-green-400/10" },
-    { label: "Proposals", value: proposals.length, icon: FileText, color: "text-brand-400", bg: "bg-brand-400/10" },
-    { label: "High Match", value: highMatch.length, icon: TrendingUp, color: "text-purple-400", bg: "bg-purple-400/10" },
+  const statCards = [
+    { label: "Jobs Scanned", value: totalScanned, icon: Search, color: "from-blue-500 to-blue-600" },
+    { label: "Proposals Sent", value: proposalCount, icon: FileText, color: "from-purple-500 to-purple-600" },
+    { label: "Avg Match Score", value: `${avgScore}%`, icon: Target, color: "from-green-500 to-emerald-600" },
+    { label: "Response Rate", value: `${responseRate}%`, icon: TrendingUp, color: "from-orange-500 to-red-500" },
   ];
 
+  const recentJobs = savedJobs.slice(0, 5);
+  const recentActivities = activities.slice(0, 8);
+
+  // Mini chart data - proposals per day (last 7 days)
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    return d.toISOString().split("T")[0];
+  });
+  const chartData = days.map(day => proposals.filter(p => p.createdAt.startsWith(day)).length);
+  const maxChart = Math.max(...chartData, 1);
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-gray-400 mt-1">
-          {profile ? `Welcome back, ${profile.name}` : "Set up your profile to get started"}
-        </p>
+        <h1 className="text-3xl font-extrabold mb-1">Dashboard</h1>
+        <p className="text-gray-500">Your Upwork automation command center.</p>
       </div>
 
-      {!profile && (
-        <div className="card border-yellow-800 bg-yellow-900/20 flex items-start gap-3">
-          <AlertCircle className="text-yellow-400 mt-0.5 shrink-0" size={20} />
-          <div>
-            <p className="font-medium text-yellow-200">Profile not set up</p>
-            <p className="text-sm text-yellow-400 mt-1">
-              <Link href="/profile" className="underline hover:text-yellow-300">
-                Set up your profile
-              </Link>{" "}
-              to enable AI job matching and proposal generation.
-            </p>
-          </div>
-        </div>
-      )}
-
+      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s) => (
-          <div key={s.label} className="card flex items-center gap-4">
-            <div className={`${s.bg} p-3 rounded-lg`}>
-              <s.icon className={s.color} size={22} />
+        {statCards.map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="card card-hover">
+            <div className="flex items-center justify-between mb-3">
+              <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center`}>
+                <Icon size={18} className="text-white" />
+              </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold">{s.value}</p>
-              <p className="text-sm text-gray-400">{s.label}</p>
-            </div>
+            <div className="text-2xl font-extrabold mb-0.5">{value}</div>
+            <div className="text-sm text-gray-500">{label}</div>
           </div>
         ))}
       </div>
 
-      {/* Recent saved jobs */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Recent Saved Jobs</h2>
-          <Link href="/jobs" className="text-sm text-brand-400 hover:underline">
-            Browse Jobs →
-          </Link>
-        </div>
-        {savedJobs.length === 0 ? (
-          <p className="text-gray-500 text-sm py-4">No saved jobs yet. Start browsing!</p>
-        ) : (
+      {/* Quick Actions + Chart */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <div className="card">
+          <h2 className="text-lg font-bold mb-4">Quick Actions</h2>
           <div className="space-y-3">
-            {savedJobs.slice(0, 5).map((j) => (
-              <div
-                key={j.id}
-                className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0"
-              >
-                <div className="min-w-0">
-                  <a
-                    href={j.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium hover:text-brand-400 truncate block"
-                  >
-                    {j.title}
-                  </a>
-                  <p className="text-xs text-gray-500">{j.budget}</p>
-                </div>
-                <span
-                  className={`badge ${
-                    j.status === "applied"
-                      ? "bg-green-900 text-green-300"
-                      : j.status === "rejected"
-                      ? "bg-red-900 text-red-300"
-                      : "bg-gray-800 text-gray-300"
-                  }`}
-                >
-                  {j.status}
-                </span>
+            <Link href="/jobs" className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.04] transition-all group">
+              <div className="flex items-center gap-3">
+                <Search size={18} className="text-blue-400" />
+                <div><div className="font-medium text-sm">New Vibe Scan</div><div className="text-xs text-gray-500">Find AI-matched jobs</div></div>
+              </div>
+              <ArrowRight size={16} className="text-gray-600 group-hover:text-white transition-colors" />
+            </Link>
+            <Link href="/proposals" className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.04] transition-all group">
+              <div className="flex items-center gap-3">
+                <FileText size={18} className="text-purple-400" />
+                <div><div className="font-medium text-sm">Generate Proposal</div><div className="text-xs text-gray-500">AI-powered cover letters</div></div>
+              </div>
+              <ArrowRight size={16} className="text-gray-600 group-hover:text-white transition-colors" />
+            </Link>
+            <Link href="/analytics" className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.04] transition-all group">
+              <div className="flex items-center gap-3">
+                <BarChart3 size={18} className="text-green-400" />
+                <div><div className="font-medium text-sm">View Analytics</div><div className="text-xs text-gray-500">Track your performance</div></div>
+              </div>
+              <ArrowRight size={16} className="text-gray-600 group-hover:text-white transition-colors" />
+            </Link>
+          </div>
+        </div>
+
+        <div className="card">
+          <h2 className="text-lg font-bold mb-4">Proposals This Week</h2>
+          <div className="flex items-end gap-2 h-40">
+            {chartData.map((val, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                <div className="w-full rounded-t-lg bg-gradient-to-t from-blue-600 to-purple-600 transition-all" style={{ height: `${(val / maxChart) * 100}%`, minHeight: val > 0 ? 8 : 2 }} />
+                <span className="text-[10px] text-gray-600">{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][new Date(days[i]).getDay()]}</span>
               </div>
             ))}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Recent proposals */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Recent Proposals</h2>
-          <Link href="/proposals" className="text-sm text-brand-400 hover:underline">
-            View All →
-          </Link>
+      {/* Activity + Saved Jobs */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <div className="card">
+          <h2 className="text-lg font-bold mb-4">Recent Activity</h2>
+          {recentActivities.length === 0 ? (
+            <div className="text-center py-8 text-gray-600">
+              <Clock size={24} className="mx-auto mb-2" />
+              <p className="text-sm">No activity yet. Start by scanning jobs!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentActivities.map((a) => (
+                <div key={a.id} className="flex items-start gap-3 text-sm">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-300 truncate">{a.message}</p>
+                    <p className="text-xs text-gray-600">{timeAgo(a.timestamp)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        {proposals.length === 0 ? (
-          <p className="text-gray-500 text-sm py-4">No proposals generated yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {proposals.slice(0, 5).map((p) => (
-              <div key={p.id} className="py-2 border-b border-gray-800 last:border-0">
-                <p className="text-sm font-medium">{p.jobTitle}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {new Date(p.createdAt).toLocaleDateString()} · {p.text.slice(0, 100)}...
-                </p>
-              </div>
-            ))}
+
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold">Saved Jobs</h2>
+            <Link href="/jobs" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">View all</Link>
           </div>
-        )}
+          {recentJobs.length === 0 ? (
+            <div className="text-center py-8 text-gray-600">
+              <Zap size={24} className="mx-auto mb-2" />
+              <p className="text-sm">No saved jobs yet. Use Vibe Scan to find matches!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentJobs.map((j) => (
+                <div key={j.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{j.title}</p>
+                    <p className="text-xs text-gray-500">{j.budget} • {j.status}</p>
+                  </div>
+                  {j.score != null && (
+                    <div className={`badge text-xs ${j.score >= 70 ? "bg-green-500/20 text-green-400" : j.score >= 40 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}>
+                      {j.score}%
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,374 +1,200 @@
 "use client";
+import { useState, useCallback } from "react";
+import { useStore } from "@/store/store";
+import { Search, Filter, Bookmark, Send, X, Loader2, ChevronDown, Globe, Clock, DollarSign, Star, Briefcase, ArrowUpDown } from "lucide-react";
+import { timeAgo, truncate } from "@/lib/utils";
+import type { Job } from "@/lib/rss";
 
-import { useState, useEffect, useCallback } from "react";
-import { useStore, SavedJob } from "@/store/store";
-import { Job } from "@/lib/rss";
-import { cn, timeAgo, truncate } from "@/lib/utils";
-import {
-  Search,
-  Star,
-  Zap,
-  ExternalLink,
-  Bookmark,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  Filter,
-  ArrowUpDown,
-} from "lucide-react";
-
-const ITEMS_PER_PAGE = 10;
+type SortBy = "relevance" | "newest" | "budget";
+type FilterState = {
+  category: string; budgetMin: string; budgetMax: string; experience: string;
+  jobType: string; country: string; showFilters: boolean;
+};
 
 export default function JobsPage() {
-  const { profile, savedJobs, saveJob, scoreCache, setScoreCache } = useStore();
+  const { profile, savedJobs, scoreCache, saveJob, removeJob, setScoreCache, addActivity } = useStore();
+  const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
-  const [keyword, setKeyword] = useState("");
-  const [searchQuery, setSearchQuery] = useState("web development");
-  const [page, setPage] = useState(1);
   const [scoring, setScoring] = useState(false);
-  const [sortBy, setSortBy] = useState<"date" | "score">("date");
+  const [sortBy, setSortBy] = useState<SortBy>("relevance");
+  const [filters, setFilters] = useState<FilterState>({
+    category: "", budgetMin: "", budgetMax: "", experience: "", jobType: "", country: "", showFilters: false,
+  });
 
-  // Filters
-  const [filterType, setFilterType] = useState<string>("all");
-  const [filterExp, setFilterExp] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(false);
-
-  const fetchJobs = useCallback(async (q: string) => {
+  const searchJobs = useCallback(async () => {
+    if (!query.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/jobs?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/jobs?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       setJobs(data.jobs || []);
-      setPage(1);
-    } catch {
-      setJobs([]);
-    }
+      addActivity({ type: "search", message: `Searched for "${query}" — found ${data.jobs?.length || 0} jobs` });
+    } catch { setJobs([]); }
     setLoading(false);
-  }, []);
+  }, [query, addActivity]);
 
-  useEffect(() => {
-    fetchJobs(searchQuery);
-  }, [searchQuery, fetchJobs]);
-
-  const scoreAllJobs = async () => {
+  const scoreAllJobs = useCallback(async () => {
     if (!profile || jobs.length === 0) return;
     setScoring(true);
-
-    const unscored = jobs.filter((j) => !scoreCache[j.id]);
-    const batches = [];
-    for (let i = 0; i < unscored.length; i += 5) {
-      batches.push(unscored.slice(i, i + 5));
-    }
-
-    for (const batch of batches) {
-      try {
-        const res = await fetch("/api/ai/score", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jobs: batch.map((j) => ({
-              id: j.id,
-              title: j.title,
-              description: j.description,
-              skills: j.skills,
-              budget: j.budget,
-            })),
-            profile: {
-              name: profile.name,
-              skills: profile.skills,
-              hourlyRate: `$${profile.hourlyRateMin}-$${profile.hourlyRateMax}`,
-              experience: profile.experience,
-              categories: profile.categories,
-            },
-          }),
-        });
-        const data = await res.json();
-        if (data.scores) {
-          data.scores.forEach((s: { id: string; score: number }) => {
-            setScoreCache(s.id, s.score);
-          });
-        }
-      } catch {}
-    }
-    setScoring(false);
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (keyword.trim()) {
-      setSearchQuery(keyword.trim());
-    }
-  };
-
-  const filteredJobs = jobs
-    .filter((j) => {
-      if (filterType !== "all" && j.jobType.toLowerCase() !== filterType) return false;
-      if (filterExp !== "all" && !j.experienceLevel.toLowerCase().includes(filterExp)) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      if (sortBy === "score") {
-        return (scoreCache[b.id] || 0) - (scoreCache[a.id] || 0);
+    try {
+      const res = await fetch("/api/ai/score", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobs: jobs.map(j => ({ id: j.id, title: j.title, description: j.description, skills: j.skills, budget: j.budget })),
+          profile: { name: profile.name, skills: profile.skills.map(s => s.name), hourlyRate: `$${profile.hourlyRateMin}-${profile.hourlyRateMax}`, experience: profile.experience, categories: profile.categories },
+        }),
+      });
+      const data = await res.json();
+      if (data.scores) {
+        data.scores.forEach((s: { id: string; score: number }) => setScoreCache(s.id, s.score));
+        addActivity({ type: "score", message: `AI scored ${data.scores.length} jobs` });
       }
-      return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
-    });
+    } catch { /* ignore */ }
+    setScoring(false);
+  }, [profile, jobs, setScoreCache, addActivity]);
 
-  const totalPages = Math.ceil(filteredJobs.length / ITEMS_PER_PAGE);
-  const paginatedJobs = filteredJobs.slice(
-    (page - 1) * ITEMS_PER_PAGE,
-    page * ITEMS_PER_PAGE
-  );
+  const isSaved = (id: string) => savedJobs.some(j => j.id === id);
 
-  const isJobSaved = (id: string) => savedJobs.some((j) => j.id === id);
-
-  const handleSaveJob = (job: Job, status: SavedJob["status"]) => {
-    saveJob({
-      id: job.id,
-      title: job.title,
-      link: job.link,
-      budget: job.budget,
-      description: job.description,
-      skills: job.skills,
-      status,
-      score: scoreCache[job.id],
-      savedAt: new Date().toISOString(),
-    });
+  const handleSave = (job: Job) => {
+    if (isSaved(job.id)) { removeJob(job.id); return; }
+    saveJob({ ...job, status: "saved", score: scoreCache[job.id], savedAt: new Date().toISOString() });
+    addActivity({ type: "save", message: `Saved "${job.title}"` });
   };
+
+  // Filter and sort
+  let filtered = jobs.filter(j => {
+    if (filters.category && !j.category.toLowerCase().includes(filters.category.toLowerCase())) return false;
+    if (filters.experience && j.experienceLevel !== filters.experience) return false;
+    if (filters.jobType && j.jobType !== filters.jobType) return false;
+    if (filters.country && !j.clientCountry.toLowerCase().includes(filters.country.toLowerCase())) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    if (sortBy === "relevance") return (scoreCache[b.id] || 0) - (scoreCache[a.id] || 0);
+    if (sortBy === "newest") return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+    return 0;
+  });
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold">Job Search</h1>
-        {profile && (
-          <button
-            onClick={scoreAllJobs}
-            disabled={scoring}
-            className="btn-primary flex items-center gap-2"
-          >
-            {scoring ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-            {scoring ? "Scoring..." : "AI Score All"}
+    <div className="max-w-7xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-3xl font-extrabold mb-1">Vibe Scan</h1>
+        <p className="text-gray-500">Describe your ideal job in plain English. AI finds and scores matches.</p>
+      </div>
+
+      {/* Search */}
+      <div className="card">
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input className="input !pl-11" placeholder="e.g. React developer for e-commerce dashboard with $50+ hourly rate" value={query}
+              onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && searchJobs()} />
+          </div>
+          <button onClick={searchJobs} disabled={loading} className="btn-primary flex items-center gap-2 shrink-0">
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />} Search
           </button>
+          <button onClick={() => setFilters(f => ({ ...f, showFilters: !f.showFilters }))} className="btn-secondary flex items-center gap-2">
+            <Filter size={18} /> Filters
+          </button>
+        </div>
+
+        {filters.showFilters && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/[0.06]">
+            <div><label className="text-xs text-gray-500 mb-1 block">Category</label><input className="input !py-2 text-sm" placeholder="e.g. Web Dev" value={filters.category} onChange={e => setFilters(f => ({...f, category: e.target.value}))} /></div>
+            <div><label className="text-xs text-gray-500 mb-1 block">Experience</label>
+              <select className="input !py-2 text-sm" value={filters.experience} onChange={e => setFilters(f => ({...f, experience: e.target.value}))}>
+                <option value="">All</option><option>Entry Level</option><option>Intermediate</option><option>Expert</option>
+              </select>
+            </div>
+            <div><label className="text-xs text-gray-500 mb-1 block">Job Type</label>
+              <select className="input !py-2 text-sm" value={filters.jobType} onChange={e => setFilters(f => ({...f, jobType: e.target.value}))}>
+                <option value="">All</option><option>Hourly</option><option>Fixed</option>
+              </select>
+            </div>
+            <div><label className="text-xs text-gray-500 mb-1 block">Country</label><input className="input !py-2 text-sm" placeholder="e.g. United States" value={filters.country} onChange={e => setFilters(f => ({...f, country: e.target.value}))} /></div>
+          </div>
         )}
       </div>
 
-      {/* Search bar */}
-      <form onSubmit={handleSearch} className="flex gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-          <input
-            type="text"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="Search jobs... (e.g. React, Python, Design)"
-            className="input pl-10"
-          />
-        </div>
-        <button type="submit" className="btn-primary">
-          Search
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowFilters(!showFilters)}
-          className="btn-secondary flex items-center gap-2"
-        >
-          <Filter size={16} />
-        </button>
-        <button
-          type="button"
-          onClick={() => setSortBy(sortBy === "date" ? "score" : "date")}
-          className="btn-secondary flex items-center gap-2"
-          title={`Sort by ${sortBy === "date" ? "score" : "date"}`}
-        >
-          <ArrowUpDown size={16} />
-          {sortBy === "date" ? "Date" : "Score"}
-        </button>
-      </form>
-
-      {/* Filters */}
-      {showFilters && (
-        <div className="card flex flex-wrap gap-4">
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Job Type</label>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="input w-40"
-            >
-              <option value="all">All Types</option>
-              <option value="fixed">Fixed Price</option>
-              <option value="hourly">Hourly</option>
-            </select>
+      {/* Toolbar */}
+      {jobs.length > 0 && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500">{filtered.length} jobs found</span>
+            {profile && (
+              <button onClick={scoreAllJobs} disabled={scoring} className="btn-secondary text-sm flex items-center gap-2 !py-1.5 !px-3">
+                {scoring ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />} AI Score All
+              </button>
+            )}
           </div>
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Experience</label>
-            <select
-              value={filterExp}
-              onChange={(e) => setFilterExp(e.target.value)}
-              className="input w-40"
-            >
-              <option value="all">All Levels</option>
-              <option value="entry">Entry</option>
-              <option value="intermediate">Intermediate</option>
-              <option value="expert">Expert</option>
-            </select>
+          <div className="flex items-center gap-2">
+            <ArrowUpDown size={14} className="text-gray-500" />
+            {(["relevance","newest","budget"] as SortBy[]).map(s => (
+              <button key={s} onClick={() => setSortBy(s)} className={`text-xs px-3 py-1.5 rounded-lg transition-all ${sortBy===s?"bg-blue-600/20 text-blue-400 font-medium":"text-gray-500 hover:text-white"}`}>{s.charAt(0).toUpperCase()+s.slice(1)}</button>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Results */}
+      {/* Job Cards */}
       {loading ? (
-        <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="card space-y-3">
-              <div className="skeleton h-5 w-3/4" />
-              <div className="skeleton h-3 w-1/4" />
-              <div className="skeleton h-12 w-full" />
-              <div className="flex gap-2">
-                <div className="skeleton h-6 w-16 rounded-full" />
-                <div className="skeleton h-6 w-20 rounded-full" />
-              </div>
-            </div>
-          ))}
+        <div className="space-y-4">{Array.from({length:5}).map((_,i)=><div key={i} className="skeleton h-40" />)}</div>
+      ) : jobs.length === 0 ? (
+        <div className="card text-center py-16">
+          <Search size={40} className="mx-auto mb-4 text-gray-700" />
+          <h3 className="text-lg font-bold mb-2">Start Your Vibe Scan</h3>
+          <p className="text-sm text-gray-500 max-w-md mx-auto">Describe your ideal job above. Our AI will search Upwork and score every job by how well it matches your profile.</p>
         </div>
       ) : (
-        <>
-          <p className="text-sm text-gray-500">
-            {filteredJobs.length} jobs found for &quot;{searchQuery}&quot;
-          </p>
-
-          <div className="space-y-4">
-            {paginatedJobs.map((job) => {
-              const score = scoreCache[job.id];
-              const saved = isJobSaved(job.id);
-
-              return (
-                <div
-                  key={job.id}
-                  className={cn(
-                    "card hover:border-gray-700 transition-colors",
-                    score !== undefined && score > 80 && "border-brand-600/50 bg-brand-900/10"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <a
-                          href={job.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-base font-semibold hover:text-brand-400 flex items-center gap-1"
-                        >
-                          {job.title}
-                          <ExternalLink size={14} className="shrink-0" />
-                        </a>
-                        {score !== undefined && (
-                          <span
-                            className={cn(
-                              "badge",
-                              score >= 80
-                                ? "bg-green-900 text-green-300"
-                                : score >= 60
-                                ? "bg-yellow-900 text-yellow-300"
-                                : "bg-gray-800 text-gray-400"
-                            )}
-                          >
-                            {score}% match
-                          </span>
-                        )}
-                        {score && score > 80 && (
-                          <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                        <span>{job.budget}</span>
-                        <span>·</span>
-                        <span>{job.jobType}</span>
-                        <span>·</span>
-                        <span>{job.experienceLevel}</span>
-                        <span>·</span>
-                        <span>{timeAgo(job.pubDate)}</span>
-                      </div>
-
-                      <p className="text-sm text-gray-400 mt-2">
-                        {truncate(job.description, 250)}
-                      </p>
-
-                      {job.skills.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-3">
-                          {job.skills.map((s) => (
-                            <span key={s} className="badge bg-gray-800 text-gray-300">
-                              {s}
-                            </span>
-                          ))}
-                        </div>
+        <div className="space-y-4">
+          {filtered.map((job) => {
+            const score = scoreCache[job.id];
+            const saved = isSaved(job.id);
+            return (
+              <div key={job.id} className="card card-hover">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <a href={job.link} target="_blank" rel="noopener noreferrer" className="text-base font-bold hover:text-blue-400 transition-colors">{job.title}</a>
+                      {score != null && (
+                        <span className={`badge text-xs ${score >= 70 ? "bg-green-500/20 text-green-400" : score >= 40 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}>
+                          {score}% match
+                        </span>
                       )}
                     </div>
-
-                    {/* Actions */}
-                    <div className="flex flex-col gap-1.5 shrink-0">
-                      <button
-                        onClick={() => handleSaveJob(job, "saved")}
-                        className={cn("btn-ghost p-2", saved && "text-brand-400")}
-                        title="Save"
-                      >
-                        <Bookmark size={16} className={saved ? "fill-current" : ""} />
-                      </button>
-                      <button
-                        onClick={() => handleSaveJob(job, "applied")}
-                        className="btn-ghost p-2 text-green-400"
-                        title="Mark Applied"
-                      >
-                        <CheckCircle size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleSaveJob(job, "rejected")}
-                        className="btn-ghost p-2 text-red-400"
-                        title="Reject"
-                      >
-                        <XCircle size={16} />
-                      </button>
+                    <p className="text-sm text-gray-400 mb-3 leading-relaxed">{truncate(job.description, 250)}</p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {job.skills.slice(0,6).map(s => <span key={s} className="text-xs px-2.5 py-1 rounded-lg bg-white/[0.04] text-gray-400 border border-white/[0.06]">{s}</span>)}
+                      {job.skills.length > 6 && <span className="text-xs text-gray-600">+{job.skills.length-6}</span>}
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <span className="flex items-center gap-1"><DollarSign size={12} />{job.budget}</span>
+                      <span className="flex items-center gap-1"><Briefcase size={12} />{job.jobType}</span>
+                      <span className="flex items-center gap-1"><Globe size={12} />{job.clientCountry}</span>
+                      <span className="flex items-center gap-1"><Clock size={12} />{timeAgo(job.pubDate)}</span>
                     </div>
                   </div>
-
-                  {/* Generate proposal button */}
-                  <div className="mt-3 pt-3 border-t border-gray-800">
-                    <a
-                      href={`/proposals?jobId=${job.id}&title=${encodeURIComponent(job.title)}&desc=${encodeURIComponent(job.description.slice(0, 1000))}&skills=${encodeURIComponent(job.skills.join(","))}&budget=${encodeURIComponent(job.budget)}`}
-                      className="text-sm text-brand-400 hover:underline"
-                    >
-                      Generate Proposal →
+                  <div className="flex flex-col gap-2 shrink-0">
+                    <button onClick={() => handleSave(job)} className={`p-2.5 rounded-xl transition-all ${saved ? "bg-blue-600/20 text-blue-400" : "bg-white/[0.04] text-gray-500 hover:text-white"}`}>
+                      <Bookmark size={16} className={saved ? "fill-current" : ""} />
+                    </button>
+                    <a href={job.link} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-xl bg-white/[0.04] text-gray-500 hover:text-green-400 transition-all">
+                      <Send size={16} />
                     </a>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-4">
-              <button
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page === 1}
-                className="btn-secondary disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-400">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(Math.min(totalPages, page + 1))}
-                disabled={page === totalPages}
-                className="btn-secondary disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
+      {!profile && jobs.length > 0 && (
+        <div className="card border-yellow-500/20 bg-yellow-500/5 text-center">
+          <p className="text-sm text-yellow-400">⚡ Set up your <a href="/profile" className="underline font-medium">profile</a> to enable AI scoring and personalized proposals.</p>
+        </div>
       )}
     </div>
   );

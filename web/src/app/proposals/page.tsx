@@ -1,196 +1,155 @@
 "use client";
-
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { useStore } from "@/store/store";
-import { Loader2, Copy, Check, FileText } from "lucide-react";
+import { FileText, Copy, Check, Loader2, Plus, Trash2, Sparkles, BookTemplate, Clock } from "lucide-react";
+import { timeAgo, truncate } from "@/lib/utils";
 
-function ProposalContent() {
-  const searchParams = useSearchParams();
-  const { profile, proposals, addProposal } = useStore();
-
+export default function ProposalsPage() {
+  const { profile, savedJobs, proposals, proposalTemplates, addProposal, updateProposal, addProposalTemplate, removeProposalTemplate, addActivity } = useStore();
+  const [selectedJob, setSelectedJob] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [proposalText, setProposalText] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"generate" | "history">(
-    searchParams.get("jobId") ? "generate" : "history"
-  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+  const [tab, setTab] = useState<"proposals" | "templates">("proposals");
+  const [newTplName, setNewTplName] = useState("");
+  const [newTplText, setNewTplText] = useState("");
 
-  const jobId = searchParams.get("jobId") || "";
-  const jobTitle = searchParams.get("title") || "";
-  const jobDesc = searchParams.get("desc") || "";
-  const jobSkills = searchParams.get("skills") || "";
-  const jobBudget = searchParams.get("budget") || "";
+  const savedJobsList = savedJobs.filter(j => j.status === "saved");
 
-  useEffect(() => {
-    if (jobId && jobTitle) {
-      setActiveTab("generate");
-    }
-  }, [jobId, jobTitle]);
-
-  const generate = async () => {
-    if (!profile) return;
+  const generateProposal = async () => {
+    if (!selectedJob || !profile) return;
+    const job = savedJobs.find(j => j.id === selectedJob);
+    if (!job) return;
     setGenerating(true);
     try {
       const res = await fetch("/api/ai/proposal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          job: {
-            title: jobTitle,
-            description: jobDesc,
-            skills: jobSkills.split(",").filter(Boolean),
-            budget: jobBudget,
-          },
-          profile: {
-            name: profile.name,
-            skills: profile.skills,
-            hourlyRate: `$${profile.hourlyRateMin}-$${profile.hourlyRateMax}`,
-            experience: profile.experience,
-            categories: profile.categories,
-          },
+          job: { title: job.title, description: job.description, skills: job.skills, budget: job.budget },
+          profile: { name: profile.name, skills: profile.skills.map(s => s.name), hourlyRate: `$${profile.hourlyRateMin}-${profile.hourlyRateMax}`, experience: profile.experience, categories: profile.categories },
         }),
       });
       const data = await res.json();
       if (data.proposal) {
-        setProposalText(data.proposal);
+        const p = { id: Date.now().toString(36), jobId: job.id, jobTitle: job.title, text: data.proposal, createdAt: new Date().toISOString(), status: "draft" as const };
+        addProposal(p);
+        addActivity({ type: "proposal", message: `Generated proposal for "${job.title}"` });
       }
-    } catch {
-      setProposalText("Failed to generate proposal. Please try again.");
-    }
+    } catch { /* ignore */ }
     setGenerating(false);
   };
 
-  const saveProposal = () => {
-    if (!proposalText) return;
-    addProposal({
-      id: Date.now().toString(),
-      jobId,
-      jobTitle,
-      text: proposalText,
-      createdAt: new Date().toISOString(),
-    });
+  const copyToClipboard = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
   };
 
-  const copyToClipboard = async () => {
-    await navigator.clipboard.writeText(proposalText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const startEdit = (id: string, text: string) => { setEditingId(id); setEditText(text); };
+  const saveEdit = () => { if (editingId) { updateProposal(editingId, { text: editText }); setEditingId(null); } };
+
+  const addTemplate = () => {
+    if (!newTplName.trim() || !newTplText.trim()) return;
+    addProposalTemplate({ id: Date.now().toString(36), name: newTplName, text: newTplText, createdAt: new Date().toISOString() });
+    setNewTplName(""); setNewTplText("");
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Proposals</h1>
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => setActiveTab("generate")}
-          className={activeTab === "generate" ? "btn-primary" : "btn-secondary"}
-        >
-          Generate
-        </button>
-        <button
-          onClick={() => setActiveTab("history")}
-          className={activeTab === "history" ? "btn-primary" : "btn-secondary"}
-        >
-          History ({proposals.length})
-        </button>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-3xl font-extrabold mb-1">AI Proposals</h1>
+        <p className="text-gray-500">Generate compelling, personalized cover letters with AI.</p>
       </div>
 
-      {activeTab === "generate" && (
-        <div className="space-y-4">
-          {jobTitle ? (
-            <div className="card">
-              <p className="text-sm text-gray-400">Generating proposal for:</p>
-              <p className="font-semibold mt-1">{jobTitle}</p>
-              <p className="text-sm text-gray-500 mt-1">{jobBudget}</p>
-            </div>
-          ) : (
-            <div className="card text-gray-400 text-sm">
-              Select a job from the Jobs page to generate a proposal.
-            </div>
-          )}
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="card"><div className="text-2xl font-extrabold">{proposals.length}</div><div className="text-sm text-gray-500">Proposals Generated</div></div>
+        <div className="card"><div className="text-2xl font-extrabold">{proposals.filter(p=>p.status==="sent").length}</div><div className="text-sm text-gray-500">Sent</div></div>
+        <div className="card"><div className="text-2xl font-extrabold">{proposalTemplates.length}</div><div className="text-sm text-gray-500">Templates</div></div>
+      </div>
 
-          {!profile && (
-            <div className="card border-yellow-800 bg-yellow-900/20 text-yellow-300 text-sm">
-              Set up your profile first to generate proposals.
-            </div>
-          )}
-
-          {jobTitle && profile && (
-            <button
-              onClick={generate}
-              disabled={generating}
-              className="btn-primary flex items-center gap-2"
-            >
-              {generating ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <FileText size={16} />
-              )}
-              {generating ? "Generating..." : "Generate Proposal"}
+      {/* Generate */}
+      <div className="card">
+        <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Sparkles size={18} className="text-purple-400" /> Generate New Proposal</h2>
+        {!profile ? (
+          <p className="text-sm text-yellow-400">⚡ <a href="/profile" className="underline">Set up your profile</a> first to generate proposals.</p>
+        ) : savedJobsList.length === 0 ? (
+          <p className="text-sm text-gray-500">No saved jobs. <a href="/jobs" className="text-blue-400 underline">Save jobs from Vibe Scan</a> first.</p>
+        ) : (
+          <div className="flex gap-3">
+            <select className="input flex-1" value={selectedJob} onChange={e => setSelectedJob(e.target.value)}>
+              <option value="">Select a saved job...</option>
+              {savedJobsList.map(j => <option key={j.id} value={j.id}>{truncate(j.title, 60)}</option>)}
+            </select>
+            <button onClick={generateProposal} disabled={!selectedJob || generating} className="btn-primary flex items-center gap-2 shrink-0">
+              {generating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />} Generate
             </button>
-          )}
+          </div>
+        )}
+      </div>
 
-          {proposalText && (
-            <div className="card space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Generated Proposal</h3>
-                <div className="flex gap-2">
-                  <button onClick={copyToClipboard} className="btn-ghost flex items-center gap-1 text-sm">
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                    {copied ? "Copied!" : "Copy"}
-                  </button>
-                  <button onClick={saveProposal} className="btn-secondary text-sm">
-                    Save
-                  </button>
+      {/* Tabs */}
+      <div className="flex gap-1 bg-white/[0.03] p-1 rounded-xl w-fit">
+        <button onClick={() => setTab("proposals")} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab==="proposals"?"bg-white/[0.08] text-white":"text-gray-500"}`}>Proposals ({proposals.length})</button>
+        <button onClick={() => setTab("templates")} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab==="templates"?"bg-white/[0.08] text-white":"text-gray-500"}`}>Templates ({proposalTemplates.length})</button>
+      </div>
+
+      {tab === "proposals" ? (
+        proposals.length === 0 ? (
+          <div className="card text-center py-12"><FileText size={40} className="mx-auto mb-4 text-gray-700" /><h3 className="font-bold mb-2">No Proposals Yet</h3><p className="text-sm text-gray-500">Generate your first AI proposal above.</p></div>
+        ) : (
+          <div className="space-y-4">
+            {proposals.map(p => (
+              <div key={p.id} className="card card-hover">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="font-bold text-sm">{p.jobTitle}</h3>
+                    <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                      <span className="flex items-center gap-1"><Clock size={12} />{timeAgo(p.createdAt)}</span>
+                      <span className={`badge text-[10px] ${p.status==="draft"?"bg-gray-500/20 text-gray-400":p.status==="sent"?"bg-blue-500/20 text-blue-400":p.status==="viewed"?"bg-yellow-500/20 text-yellow-400":"bg-green-500/20 text-green-400"}`}>{p.status}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => copyToClipboard(p.id, p.text)} className="btn-ghost !p-2">
+                      {copied === p.id ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+                    </button>
+                    <button onClick={() => editingId === p.id ? saveEdit() : startEdit(p.id, p.text)} className="btn-secondary !py-1.5 !px-3 text-xs">
+                      {editingId === p.id ? "Save" : "Edit"}
+                    </button>
+                  </div>
                 </div>
+                {editingId === p.id ? (
+                  <textarea className="input min-h-[200px] text-sm font-mono" value={editText} onChange={e => setEditText(e.target.value)} />
+                ) : (
+                  <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{p.text}</p>
+                )}
               </div>
-              <textarea
-                value={proposalText}
-                onChange={(e) => setProposalText(e.target.value)}
-                className="input min-h-[300px] font-mono text-sm"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === "history" && (
+            ))}
+          </div>
+        )
+      ) : (
         <div className="space-y-4">
-          {proposals.length === 0 ? (
-            <div className="card text-gray-500 text-sm">No saved proposals yet.</div>
-          ) : (
-            proposals.map((p) => (
-              <div key={p.id} className="card space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-sm">{p.jobTitle}</h3>
-                  <span className="text-xs text-gray-500">
-                    {new Date(p.createdAt).toLocaleDateString()}
-                  </span>
+          <div className="card">
+            <h3 className="font-bold text-sm mb-3">New Template</h3>
+            <input className="input mb-3 text-sm" placeholder="Template name" value={newTplName} onChange={e => setNewTplName(e.target.value)} />
+            <textarea className="input min-h-[120px] text-sm mb-3" placeholder="Template text... Use {job_title}, {client_name} as placeholders" value={newTplText} onChange={e => setNewTplText(e.target.value)} />
+            <button onClick={addTemplate} className="btn-primary text-sm">Save Template</button>
+          </div>
+          {proposalTemplates.map(t => (
+            <div key={t.id} className="card card-hover">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-bold text-sm">{t.name}</h3>
+                <div className="flex gap-2">
+                  <button onClick={() => copyToClipboard(t.id, t.text)} className="btn-ghost !p-2">{copied===t.id?<Check size={14} className="text-green-400"/>:<Copy size={14}/>}</button>
+                  <button onClick={() => removeProposalTemplate(t.id)} className="btn-ghost !p-2 text-red-400"><Trash2 size={14}/></button>
                 </div>
-                <p className="text-sm text-gray-400 whitespace-pre-wrap">{p.text}</p>
-                <button
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(p.text);
-                  }}
-                  className="btn-ghost text-xs flex items-center gap-1"
-                >
-                  <Copy size={12} /> Copy
-                </button>
               </div>
-            ))
-          )}
+              <p className="text-sm text-gray-400 whitespace-pre-wrap">{t.text}</p>
+            </div>
+          ))}
         </div>
       )}
     </div>
-  );
-}
-
-export default function ProposalsPage() {
-  return (
-    <Suspense fallback={<div className="max-w-4xl mx-auto"><div className="skeleton h-8 w-48 mb-6" /><div className="skeleton h-64 w-full" /></div>}>
-      <ProposalContent />
-    </Suspense>
   );
 }
