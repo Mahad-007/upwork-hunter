@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useStore } from "@/store/store";
-import { User, Plus, X, Save, Briefcase } from "lucide-react";
+import { Plus, X, Save } from "lucide-react";
 
 const EXPERIENCE_LEVELS = ["Entry Level", "Intermediate", "Expert"];
 const CATEGORIES = ["Web Development", "Mobile Development", "UI/UX Design", "Data Science", "DevOps", "Blockchain", "AI/ML", "Content Writing", "Digital Marketing", "Video Editing", "Graphic Design", "Game Development"];
@@ -20,23 +20,16 @@ export default function ProfilePage() {
   const [newLink, setNewLink] = useState("");
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    if (profile) setForm(profile);
-  }, [profile]);
+  useEffect(() => { if (profile) setForm(profile); }, [profile]);
 
   const addSkill = () => {
     if (!newSkill.trim() || form.skills.some(s => s.name.toLowerCase() === newSkill.toLowerCase())) return;
     setForm({ ...form, skills: [...form.skills, { name: newSkill.trim(), level: 3 }] });
     setNewSkill("");
   };
-
   const removeSkill = (name: string) => setForm({ ...form, skills: form.skills.filter(s => s.name !== name) });
   const setSkillLevel = (name: string, level: number) => setForm({ ...form, skills: form.skills.map(s => s.name === name ? { ...s, level } : s) });
-
-  const toggleCategory = (cat: string) => {
-    setForm({ ...form, categories: form.categories.includes(cat) ? form.categories.filter(c => c !== cat) : [...form.categories, cat] });
-  };
-
+  const toggleCategory = (cat: string) => setForm({ ...form, categories: form.categories.includes(cat) ? form.categories.filter(c => c !== cat) : [...form.categories, cat] });
   const addLink = () => { if (!newLink.trim()) return; setForm({ ...form, portfolioLinks: [...form.portfolioLinks, newLink.trim()] }); setNewLink(""); };
   const removeLink = (i: number) => setForm({ ...form, portfolioLinks: form.portfolioLinks.filter((_, idx) => idx !== i) });
 
@@ -49,72 +42,67 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div><h1 className="text-3xl font-extrabold mb-1">Profile</h1><p className="text-gray-500">Your professional profile powers AI matching and proposal generation.</p></div>
+      <div><h1 className="text-3xl font-bold mb-1">Profile</h1><p className="text-gray-600 dark:text-gray-400 font-medium">Your professional profile powers AI matching and proposal generation.</p></div>
 
       <div className="card space-y-6">
-        {/* Basic */}
         <div className="grid md:grid-cols-2 gap-4">
-          <div><label className="text-xs text-gray-500 mb-1 block font-medium">Full Name *</label><input className="input" placeholder="John Doe" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
-          <div><label className="text-xs text-gray-500 mb-1 block font-medium">Professional Title</label><input className="input" placeholder="Full-Stack Developer" value={form.title} onChange={e => setForm({...form, title: e.target.value})} /></div>
+          <div><label className="text-xs font-bold text-gray-500 mb-1 block">Full Name *</label><input className="input" placeholder="John Doe" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
+          <div><label className="text-xs font-bold text-gray-500 mb-1 block">Professional Title</label><input className="input" placeholder="Full-Stack Developer" value={form.title} onChange={e => setForm({...form, title: e.target.value})} /></div>
         </div>
 
-        <div><label className="text-xs text-gray-500 mb-1 block font-medium">Bio / Elevator Pitch</label>
-          <textarea className="input min-h-[100px] text-sm" placeholder="Brief description of your expertise and what you offer..." value={form.bio} onChange={e => setForm({...form, bio: e.target.value})} />
-          <p className="text-xs text-gray-600 mt-1">Used by AI to personalize proposals.</p>
+        <div><label className="text-xs font-bold text-gray-500 mb-1 block">Bio / Elevator Pitch</label>
+          <textarea className="input min-h-[100px] text-sm" placeholder="Brief description of your expertise..." value={form.bio} onChange={e => setForm({...form, bio: e.target.value})} />
+          <p className="text-xs text-gray-400 mt-1 font-medium">Used by AI to personalize proposals.</p>
         </div>
 
-        {/* Skills */}
         <div>
-          <label className="text-xs text-gray-500 mb-2 block font-medium">Skills & Proficiency</label>
+          <label className="text-xs font-bold text-gray-500 mb-2 block">Skills & Proficiency</label>
           <div className="flex gap-2 mb-3">
             <input className="input flex-1" placeholder="e.g. React, Node.js, Python" value={newSkill} onChange={e => setNewSkill(e.target.value)} onKeyDown={e => e.key === "Enter" && addSkill()} />
             <button onClick={addSkill} className="btn-secondary flex items-center gap-1"><Plus size={16} /> Add</button>
           </div>
           <div className="space-y-2">
             {form.skills.map(s => (
-              <div key={s.name} className="flex items-center gap-3 p-2 rounded-xl bg-white/[0.03]">
-                <span className="text-sm font-medium flex-1">{s.name}</span>
+              <div key={s.name} className="flex items-center gap-3 p-2 border-2 border-black/10 dark:border-green-500/20">
+                <span className="text-sm font-bold flex-1">{s.name}</span>
                 <div className="flex gap-1">{[1,2,3,4,5].map(l => (
-                  <button key={l} onClick={() => setSkillLevel(s.name, l)} className={`w-6 h-6 rounded-md text-xs font-bold transition-all ${l <= s.level ? "bg-blue-600 text-white" : "bg-white/[0.06] text-gray-600"}`}>{l}</button>
+                  <button key={l} onClick={() => setSkillLevel(s.name, l)} className={`w-6 h-6 text-xs font-bold border-2 border-black transition-all ${l <= s.level ? "bg-green-500 text-black" : "bg-gray-100 dark:bg-white/10 text-gray-400"}`}>{l}</button>
                 ))}</div>
-                <button onClick={() => removeSkill(s.name)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+                <button onClick={() => removeSkill(s.name)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Rate & Experience */}
         <div className="grid md:grid-cols-3 gap-4">
-          <div><label className="text-xs text-gray-500 mb-1 block font-medium">Min Rate ($/hr)</label><input type="number" className="input" value={form.hourlyRateMin} onChange={e => setForm({...form, hourlyRateMin: parseInt(e.target.value)||0})} /></div>
-          <div><label className="text-xs text-gray-500 mb-1 block font-medium">Max Rate ($/hr)</label><input type="number" className="input" value={form.hourlyRateMax} onChange={e => setForm({...form, hourlyRateMax: parseInt(e.target.value)||0})} /></div>
-          <div><label className="text-xs text-gray-500 mb-1 block font-medium">Experience Level</label>
+          <div><label className="text-xs font-bold text-gray-500 mb-1 block">Min Rate ($/hr)</label><input type="number" className="input" value={form.hourlyRateMin} onChange={e => setForm({...form, hourlyRateMin: parseInt(e.target.value)||0})} /></div>
+          <div><label className="text-xs font-bold text-gray-500 mb-1 block">Max Rate ($/hr)</label><input type="number" className="input" value={form.hourlyRateMax} onChange={e => setForm({...form, hourlyRateMax: parseInt(e.target.value)||0})} /></div>
+          <div><label className="text-xs font-bold text-gray-500 mb-1 block">Experience Level</label>
             <select className="input" value={form.experience} onChange={e => setForm({...form, experience: e.target.value})}>
               {EXPERIENCE_LEVELS.map(l => <option key={l}>{l}</option>)}
             </select>
           </div>
         </div>
 
-        {/* Categories */}
         <div>
-          <label className="text-xs text-gray-500 mb-2 block font-medium">Preferred Categories</label>
+          <label className="text-xs font-bold text-gray-500 mb-2 block">Preferred Categories</label>
           <div className="flex flex-wrap gap-2">
             {CATEGORIES.map(cat => (
-              <button key={cat} onClick={() => toggleCategory(cat)} className={`text-xs px-3 py-1.5 rounded-xl border transition-all ${form.categories.includes(cat) ? "bg-blue-600/20 border-blue-500/30 text-blue-400" : "bg-white/[0.03] border-white/[0.06] text-gray-500 hover:text-white"}`}>{cat}</button>
+              <button key={cat} onClick={() => toggleCategory(cat)} className={`text-xs px-3 py-1.5 border-2 font-bold transition-all ${form.categories.includes(cat) ? "bg-green-500 text-black border-black" : "border-black/20 dark:border-green-500/30 hover:border-black dark:hover:border-green-400"}`} style={form.categories.includes(cat) ? { boxShadow: "2px 2px 0px black" } : {}}>{cat}</button>
             ))}
           </div>
         </div>
 
-        {/* Portfolio */}
         <div>
-          <label className="text-xs text-gray-500 mb-2 block font-medium">Portfolio Links</label>
+          <label className="text-xs font-bold text-gray-500 mb-2 block">Portfolio Links</label>
           <div className="flex gap-2 mb-3">
             <input className="input flex-1" placeholder="https://..." value={newLink} onChange={e => setNewLink(e.target.value)} onKeyDown={e => e.key === "Enter" && addLink()} />
             <button onClick={addLink} className="btn-secondary flex items-center gap-1"><Plus size={16} /></button>
           </div>
           {form.portfolioLinks.map((link, i) => (
             <div key={i} className="flex items-center gap-2 mb-1.5">
-              <span className="text-sm text-blue-400 truncate flex-1">{link}</span>
-              <button onClick={() => removeLink(i)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+              <span className="text-sm text-green-600 truncate flex-1 font-medium">{link}</span>
+              <button onClick={() => removeLink(i)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
             </div>
           ))}
         </div>
