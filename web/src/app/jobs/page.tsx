@@ -11,12 +11,11 @@ type FilterState = {
   jobType: string; country: string; showFilters: boolean;
 };
 
-type JobSource = "RemoteOK" | "WeWorkRemotely" | "Sample";
+type JobSource = "RemoteOK" | "WeWorkRemotely";
 
 const sourceColors: Record<JobSource, string> = {
   RemoteOK: "bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-400 border-purple-300 dark:border-purple-500/40",
   WeWorkRemotely: "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-400 border-blue-300 dark:border-blue-500/40",
-  Sample: "bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400 border-gray-300 dark:border-gray-500/40",
 };
 
 export default function JobsPage() {
@@ -76,9 +75,17 @@ export default function JobsPage() {
 
   let filtered = jobs.filter(j => {
     if (filters.category && !j.category.toLowerCase().includes(filters.category.toLowerCase())) return false;
-    if (filters.experience && j.experienceLevel !== filters.experience) return false;
-    if (filters.jobType && j.jobType !== filters.jobType) return false;
+    if (filters.experience && j.experienceLevel !== "Not specified" && j.experienceLevel !== filters.experience) return false;
+    if (filters.jobType && !j.jobType.toLowerCase().includes(filters.jobType.toLowerCase())) return false;
     if (filters.country && !j.clientCountry.toLowerCase().includes(filters.country.toLowerCase())) return false;
+    // Budget filtering - extract numbers from budget string
+    if (filters.budgetMin || filters.budgetMax) {
+      const budgetNumbers = j.budget.match(/\d+(?:,\d{3})*/g)?.map(n => parseInt(n.replace(/,/g, ''))) || [];
+      const maxBudget = budgetNumbers.length > 0 ? Math.max(...budgetNumbers) : 0;
+      const minBudget = budgetNumbers.length > 0 ? Math.min(...budgetNumbers) : 0;
+      if (filters.budgetMin && minBudget < parseInt(filters.budgetMin)) return false;
+      if (filters.budgetMax && maxBudget > parseInt(filters.budgetMax)) return false;
+    }
     return true;
   });
 
@@ -111,7 +118,7 @@ export default function JobsPage() {
         </div>
 
         {filters.showFilters && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t-2 border-black/10 dark:border-green-500/20">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-4 pt-4 border-t-2 border-black/10 dark:border-green-500/20">
             <div><label className="text-xs font-bold text-gray-500 mb-1 block">Category</label><input className="input !py-2 text-sm" placeholder="e.g. Web Dev" value={filters.category} onChange={e => setFilters(f => ({...f, category: e.target.value}))} /></div>
             <div><label className="text-xs font-bold text-gray-500 mb-1 block">Experience</label>
               <select className="input !py-2 text-sm" value={filters.experience} onChange={e => setFilters(f => ({...f, experience: e.target.value}))}>
@@ -120,9 +127,11 @@ export default function JobsPage() {
             </div>
             <div><label className="text-xs font-bold text-gray-500 mb-1 block">Job Type</label>
               <select className="input !py-2 text-sm" value={filters.jobType} onChange={e => setFilters(f => ({...f, jobType: e.target.value}))}>
-                <option value="">All</option><option>Hourly</option><option>Fixed</option>
+                <option value="">All</option><option value="Full-Time">Full-Time</option><option value="Part-Time">Part-Time</option><option value="Contract">Contract</option><option value="Hourly">Hourly</option><option value="Fixed">Fixed</option>
               </select>
             </div>
+            <div><label className="text-xs font-bold text-gray-500 mb-1 block">Min Budget ($)</label><input type="number" className="input !py-2 text-sm" placeholder="e.g. 30" value={filters.budgetMin} onChange={e => setFilters(f => ({...f, budgetMin: e.target.value}))} /></div>
+            <div><label className="text-xs font-bold text-gray-500 mb-1 block">Max Budget ($)</label><input type="number" className="input !py-2 text-sm" placeholder="e.g. 100" value={filters.budgetMax} onChange={e => setFilters(f => ({...f, budgetMax: e.target.value}))} /></div>
             <div><label className="text-xs font-bold text-gray-500 mb-1 block">Country</label><input className="input !py-2 text-sm" placeholder="e.g. United States" value={filters.country} onChange={e => setFilters(f => ({...f, country: e.target.value}))} /></div>
           </div>
         )}
@@ -194,7 +203,7 @@ export default function JobsPage() {
                       <span className="flex items-center gap-1"><Globe size={12} />{job.clientCountry}</span>
                       <span className="flex items-center gap-1"><Clock size={12} />{timeAgo(job.pubDate)}</span>
                       {job.source && (
-                        <span className={`px-2 py-0.5 border text-[10px] font-bold ${sourceColors[job.source as JobSource] || sourceColors.Sample}`}>
+                        <span className={`px-2 py-0.5 border text-[10px] font-bold ${sourceColors[job.source as JobSource] || "bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400 border-gray-300 dark:border-gray-500/40"}`}>
                           {job.source}
                         </span>
                       )}

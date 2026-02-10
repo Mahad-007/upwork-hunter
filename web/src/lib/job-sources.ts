@@ -24,6 +24,77 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Word boundary matching - ensures keywords match as whole words
+ * "AI" matches "AI Engineer" but NOT "WAIT" or "PAID"
+ */
+function wordBoundaryMatch(text: string, keyword: string): boolean {
+  // Escape special regex characters in keyword
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`\\b${escaped}\\b`, "i");
+  return regex.test(text);
+}
+
+/**
+ * Parse keywords from search query
+ * Allows 2+ char keywords to support "AI", "Go", "UI", "UX"
+ */
+function parseKeywords(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((k) => k.length >= 2); // Changed from > 2 to >= 2
+}
+
+function detectExperienceLevel(text: string): string {
+  const lower = text.toLowerCase();
+
+  // Expert indicators
+  const expertPatterns = [
+    /\b(senior|lead|principal|staff|architect|head of|director|10\+?\s*years?|8\+?\s*years?|7\+?\s*years?)\b/i,
+    /\b(expert|advanced|extensive experience)\b/i,
+  ];
+
+  // Entry level indicators
+  const entryPatterns = [
+    /\b(junior|entry[- ]level|intern|trainee|graduate|0-2\s*years?|1-2\s*years?|no experience)\b/i,
+    /\b(entry|beginner|starter|fresh)\b/i,
+  ];
+
+  // Check for expert first
+  for (const pattern of expertPatterns) {
+    if (pattern.test(lower)) return "Expert";
+  }
+
+  // Check for entry level
+  for (const pattern of entryPatterns) {
+    if (pattern.test(lower)) return "Entry Level";
+  }
+
+  // Check for intermediate indicators
+  const intermediatePatterns = [
+    /\b(mid[- ]?level|intermediate|3-5\s*years?|4-6\s*years?|2-4\s*years?|some experience)\b/i,
+  ];
+
+  for (const pattern of intermediatePatterns) {
+    if (pattern.test(lower)) return "Intermediate";
+  }
+
+  return "Not specified";
+}
+
+function detectJobType(text: string, defaultType: string = "Full-Time"): string {
+  const lower = text.toLowerCase();
+
+  if (/\b(hourly|per hour|\/hr|\/hour)\b/i.test(lower)) return "Hourly";
+  if (/\b(fixed[- ]?price|fixed[- ]?budget|project[- ]?based|one[- ]?time)\b/i.test(lower)) return "Fixed";
+  if (/\b(part[- ]?time)\b/i.test(lower)) return "Part-Time";
+  if (/\b(contract|freelance|contractor)\b/i.test(lower)) return "Contract";
+  if (/\b(full[- ]?time)\b/i.test(lower)) return "Full-Time";
+
+  return defaultType;
+}
+
 // RemoteOK API types
 interface RemoteOKJob {
   id: string;
@@ -76,20 +147,54 @@ export async function fetchRemoteOKJobs(query: string): Promise<Job[]> {
     // First item is metadata, skip it
     const jobs = data.slice(1);
 
-    // Filter by query keywords
-    const keywords = query
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((k) => k.length > 2);
+    // Filter by query keywords with relevance scoring
+    const keywords = parseKeywords(query);
+    const queryLower = query.toLowerCase().trim();
 
-    const filtered = jobs.filter((job) => {
-      if (!job.position || !job.description) return false;
-      const text =
-        `${job.position} ${job.description} ${job.tags?.join(" ") || ""} ${job.company}`.toLowerCase();
-      return (
-        keywords.length === 0 || keywords.some((keyword) => text.includes(keyword))
-      );
-    });
+    const scored = jobs
+      .filter((job) => job.position && job.description)
+      .map((job) => {
+        const titleLower = job.position.toLowerCase();
+        const descLower = job.description.toLowerCase();
+        const tagsLower = (job.tags || []).join(" ").toLowerCase();
+        const companyLower = (job.company || "").toLowerCase();
+        const allText = `${titleLower} ${descLower} ${tagsLower} ${companyLower}`;
+
+        // Check if ALL keywords match somewhere (word boundary matching)
+        const allKeywordsMatch = keywords.length === 0 || keywords.every((keyword) =>
+          wordBoundaryMatch(allText, keyword)
+        );
+
+        if (!allKeywordsMatch) {
+          return { job, score: 0, hasMatch: false };
+        }
+
+        // Calculate relevance score using word boundary matching
+        let score = 0;
+
+        // Bonus for exact phrase match in title
+        if (titleLower.includes(queryLower)) score += 25;
+
+        // Score individual keyword matches with word boundaries
+        for (const keyword of keywords) {
+          if (wordBoundaryMatch(titleLower, keyword)) score += 10;
+          if (wordBoundaryMatch(tagsLower, keyword)) score += 8;
+          if (wordBoundaryMatch(descLower, keyword)) score += 2;
+          if (wordBoundaryMatch(companyLower, keyword)) score += 1;
+        }
+
+        // Bonus if all keywords appear in title
+        const allInTitle = keywords.every((k) => wordBoundaryMatch(titleLower, k));
+        if (allInTitle && keywords.length > 0) score += 15;
+
+        return { job, score, hasMatch: true };
+      });
+
+    // Only include jobs with at least one keyword match, sorted by relevance
+    const filtered = scored
+      .filter((s) => s.hasMatch)
+      .sort((a, b) => b.score - a.score)
+      .map((s) => s.job);
 
     // Convert to our Job format
     return filtered.slice(0, 30).map((job) => {
@@ -100,6 +205,10 @@ export async function fetchRemoteOKJobs(query: string): Promise<Job[]> {
             ? `From $${job.salary_min.toLocaleString()}/yr`
             : "Not specified";
 
+      const fullText = `${job.position} ${job.description || ""}`;
+      const experienceLevel = detectExperienceLevel(fullText);
+      const jobType = detectJobType(fullText, "Full-Time");
+
       return {
         id: `rok-${job.id || hashString(job.slug || job.position)}`,
         title: job.position || "Untitled",
@@ -109,8 +218,8 @@ export async function fetchRemoteOKJobs(query: string): Promise<Job[]> {
         budget: salaryText,
         skills: (job.tags || []).slice(0, 8).map((t) => t.charAt(0).toUpperCase() + t.slice(1)),
         category: job.tags?.[0] || "Remote",
-        jobType: "Full-Time",
-        experienceLevel: "Not specified",
+        jobType: jobType,
+        experienceLevel: experienceLevel,
         clientCountry: job.location || "Remote",
         source: "RemoteOK" as const,
       };
@@ -145,16 +254,52 @@ export async function fetchWeWorkRemotelyJobs(query: string): Promise<Job[]> {
     // Parse RSS manually for better control
     const jobs = parseWWRRss(xml);
 
-    // Filter by query keywords
-    const keywords = query
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((k) => k.length > 2);
+    // Filter by query keywords with relevance scoring
+    const keywords = parseKeywords(query);
+    const queryLower = query.toLowerCase().trim();
 
-    const filtered = jobs.filter((job) => {
-      const text = `${job.title} ${job.description}`.toLowerCase();
-      return keywords.length === 0 || keywords.some((keyword) => text.includes(keyword));
+    const scored = jobs.map((job) => {
+      const titleLower = job.title.toLowerCase();
+      const descLower = job.description.toLowerCase();
+      const skillsLower = job.skills.join(" ").toLowerCase();
+      const categoryLower = job.category.toLowerCase();
+      const allText = `${titleLower} ${descLower} ${skillsLower} ${categoryLower}`;
+
+      // Check if ALL keywords match somewhere (word boundary matching)
+      const allKeywordsMatch = keywords.length === 0 || keywords.every((keyword) =>
+        wordBoundaryMatch(allText, keyword)
+      );
+
+      if (!allKeywordsMatch) {
+        return { job, score: 0, hasMatch: false };
+      }
+
+      // Calculate relevance score using word boundary matching
+      let score = 0;
+
+      // Bonus for exact phrase match in title
+      if (titleLower.includes(queryLower)) score += 25;
+
+      // Score individual keyword matches with word boundaries
+      for (const keyword of keywords) {
+        if (wordBoundaryMatch(titleLower, keyword)) score += 10;
+        if (wordBoundaryMatch(skillsLower, keyword)) score += 8;
+        if (wordBoundaryMatch(categoryLower, keyword)) score += 3;
+        if (wordBoundaryMatch(descLower, keyword)) score += 2;
+      }
+
+      // Bonus if all keywords appear in title
+      const allInTitle = keywords.every((k) => wordBoundaryMatch(titleLower, k));
+      if (allInTitle && keywords.length > 0) score += 15;
+
+      return { job, score, hasMatch: true };
     });
+
+    // Only include jobs with at least one keyword match, sorted by relevance
+    const filtered = scored
+      .filter((s) => s.hasMatch)
+      .sort((a, b) => b.score - a.score)
+      .map((s) => s.job);
 
     return filtered.slice(0, 30);
   } catch (error) {
@@ -204,6 +349,10 @@ function parseWWRRss(xml: string): Job[] {
     );
     const skills = Array.from(new Set(skillsMatch || [])).slice(0, 6);
 
+    const fullText = `${title} ${description}`;
+    const detectedExperience = detectExperienceLevel(fullText);
+    const detectedJobType = detectJobType(fullText, jobType);
+
     jobs.push({
       id: `wwr-${hashString(link || title)}`,
       title: jobTitle,
@@ -213,8 +362,8 @@ function parseWWRRss(xml: string): Job[] {
       budget: "Not specified",
       skills: skills.length > 0 ? skills : [category],
       category: category,
-      jobType: jobType,
-      experienceLevel: "Not specified",
+      jobType: detectedJobType,
+      experienceLevel: detectedExperience,
       clientCountry: region,
       source: "WeWorkRemotely" as const,
     });
@@ -223,182 +372,7 @@ function parseWWRRss(xml: string): Job[] {
   return jobs;
 }
 
-/**
- * Fallback jobs when all sources fail
- */
-export function getFallbackJobs(query: string): Job[] {
-  const q = query.toLowerCase();
-  const now = new Date().toISOString();
-
-  const allJobs: Job[] = [
-    {
-      id: "fb1",
-      title: "Senior React Developer for E-Commerce Platform",
-      description:
-        "We need an experienced React developer to build a modern e-commerce platform with Next.js, TypeScript, and Tailwind CSS. The project involves creating a responsive storefront, shopping cart, checkout flow, and admin dashboard. Must have experience with payment integration (Stripe) and state management.",
-      link: "#",
-      pubDate: now,
-      budget: "$50-$80/hr",
-      skills: ["React", "Next.js", "TypeScript", "Tailwind CSS", "Stripe"],
-      category: "Web Development",
-      jobType: "Hourly",
-      experienceLevel: "Expert",
-      clientCountry: "United States",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb2",
-      title: "Full-Stack Node.js Developer for SaaS Application",
-      description:
-        "Looking for a full-stack developer to build a SaaS application using Node.js, Express, PostgreSQL, and React. The app will include user authentication, subscription management, REST API, and real-time notifications via WebSockets. Experience with Docker and AWS deployment preferred.",
-      link: "#",
-      pubDate: now,
-      budget: "$5,000 - $10,000",
-      skills: ["Node.js", "Express", "PostgreSQL", "React", "Docker", "AWS"],
-      category: "Web Development",
-      jobType: "Fixed",
-      experienceLevel: "Expert",
-      clientCountry: "United Kingdom",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb3",
-      title: "Python Backend Developer for Data Analytics Dashboard",
-      description:
-        "Need a Python developer to build a data analytics dashboard backend using FastAPI and SQLAlchemy. The dashboard will process large datasets, generate reports, and display interactive charts. Must have experience with pandas, numpy, and data visualization libraries.",
-      link: "#",
-      pubDate: now,
-      budget: "$40-$65/hr",
-      skills: ["Python", "FastAPI", "SQLAlchemy", "Pandas", "PostgreSQL"],
-      category: "Data Science",
-      jobType: "Hourly",
-      experienceLevel: "Intermediate",
-      clientCountry: "Canada",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb4",
-      title: "React Native Mobile App Developer",
-      description:
-        "We are building a fitness tracking mobile app using React Native. The app needs GPS tracking, workout logging, social features, and integration with Apple Health/Google Fit. Looking for someone with published apps on both App Store and Play Store.",
-      link: "#",
-      pubDate: now,
-      budget: "$8,000 - $15,000",
-      skills: ["React Native", "TypeScript", "Firebase", "iOS", "Android"],
-      category: "Mobile Development",
-      jobType: "Fixed",
-      experienceLevel: "Expert",
-      clientCountry: "Australia",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb5",
-      title: "WordPress Developer for Business Website Redesign",
-      description:
-        "Need a WordPress developer to redesign our company website. Must be proficient with Elementor, custom themes, WooCommerce, and SEO optimization. The site needs to be fast, mobile-responsive, and ADA compliant. Around 15 pages total.",
-      link: "#",
-      pubDate: now,
-      budget: "$1,500 - $3,000",
-      skills: ["WordPress", "Elementor", "PHP", "WooCommerce", "SEO"],
-      category: "Web Development",
-      jobType: "Fixed",
-      experienceLevel: "Intermediate",
-      clientCountry: "United States",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb6",
-      title: "DevOps Engineer - CI/CD Pipeline Setup",
-      description:
-        "Looking for a DevOps engineer to set up CI/CD pipelines using GitHub Actions, Docker, and Kubernetes. Need automated testing, staging environments, and production deployment workflows for a microservices architecture. Terraform experience required.",
-      link: "#",
-      pubDate: now,
-      budget: "$60-$90/hr",
-      skills: ["Docker", "Kubernetes", "GitHub Actions", "Terraform", "AWS"],
-      category: "DevOps",
-      jobType: "Hourly",
-      experienceLevel: "Expert",
-      clientCountry: "Germany",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb7",
-      title: "UI/UX Designer for Fintech Mobile App",
-      description:
-        "We need a talented UI/UX designer to create a modern, clean design for our fintech mobile app. Deliverables include user research, wireframes, high-fidelity mockups in Figma, and a design system. Experience with banking/finance apps is a plus.",
-      link: "#",
-      pubDate: now,
-      budget: "$3,000 - $6,000",
-      skills: ["Figma", "UI Design", "UX Research", "Prototyping", "Design Systems"],
-      category: "UI/UX Design",
-      jobType: "Fixed",
-      experienceLevel: "Intermediate",
-      clientCountry: "Singapore",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb8",
-      title: "Machine Learning Engineer for NLP Project",
-      description:
-        "Seeking an ML engineer to build a text classification and sentiment analysis system. Must have experience with transformers (BERT/GPT), PyTorch, and deploying ML models as APIs. The system will process customer feedback and generate insights.",
-      link: "#",
-      pubDate: now,
-      budget: "$70-$120/hr",
-      skills: ["Python", "PyTorch", "NLP", "Transformers", "Machine Learning"],
-      category: "AI/ML",
-      jobType: "Hourly",
-      experienceLevel: "Expert",
-      clientCountry: "United States",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb9",
-      title: "Vue.js Frontend Developer for Admin Dashboard",
-      description:
-        "Need a Vue.js developer to build an admin dashboard with complex data tables, charts, role-based access, and real-time updates. Tech stack: Vue 3, Composition API, Pinia, Vuetify, and Chart.js. API is already built, just need the frontend.",
-      link: "#",
-      pubDate: now,
-      budget: "$2,000 - $4,000",
-      skills: ["Vue.js", "TypeScript", "Vuetify", "Chart.js", "REST API"],
-      category: "Web Development",
-      jobType: "Fixed",
-      experienceLevel: "Intermediate",
-      clientCountry: "Netherlands",
-      source: "Sample" as const,
-    },
-    {
-      id: "fb10",
-      title: "Flutter Developer for Cross-Platform App",
-      description:
-        "Looking for a Flutter developer to build a cross-platform delivery tracking app. Features include real-time GPS tracking, push notifications, payment integration, and driver/customer interfaces. Need experience with Firebase and Google Maps API.",
-      link: "#",
-      pubDate: now,
-      budget: "$6,000 - $12,000",
-      skills: ["Flutter", "Dart", "Firebase", "Google Maps API", "REST API"],
-      category: "Mobile Development",
-      jobType: "Fixed",
-      experienceLevel: "Intermediate",
-      clientCountry: "UAE",
-      source: "Sample" as const,
-    },
-  ];
-
-  // Filter by relevance to query
-  const keywords = q.split(/\s+/).filter((k) => k.length > 2);
-  if (keywords.length === 0) return allJobs;
-
-  const scored = allJobs.map((job) => {
-    const text =
-      `${job.title} ${job.description} ${job.skills.join(" ")} ${job.category}`.toLowerCase();
-    const matchCount = keywords.filter((k) => text.includes(k)).length;
-    return { job, score: matchCount };
-  });
-
-  scored.sort((a, b) => b.score - a.score);
-  return scored.map((s) => s.job);
-}
-
-export type JobSource = "RemoteOK" | "WeWorkRemotely" | "Sample";
+export type JobSource = "RemoteOK" | "WeWorkRemotely";
 
 export interface FetchJobsResult {
   jobs: Job[];
@@ -437,15 +411,12 @@ export async function fetchAllJobs(query: string): Promise<FetchJobsResult> {
     allJobs = [...allJobs, ...wwrJobs];
   }
 
-  // If no jobs from real sources, use fallback
+  // If no jobs found, add an error message
   if (allJobs.length === 0) {
-    sources.push("Sample");
-    allJobs = getFallbackJobs(query);
-    errors.push("All live sources failed, showing sample jobs");
+    errors.push("No jobs found matching your search. Try different keywords.");
   }
 
-  // Sort by date (newest first)
-  allJobs.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
+  // Jobs are already sorted by relevance from each source
 
   return {
     jobs: allJobs,
