@@ -12,6 +12,7 @@ export interface Job {
   jobType: string;
   experienceLevel: string;
   clientCountry: string;
+  source?: "RemoteOK" | "WeWorkRemotely" | "Sample" | "rss";
 }
 
 function extractField(desc: string, field: string): string {

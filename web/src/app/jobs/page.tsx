@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback } from "react";
 import { useStore } from "@/store/store";
-import { Search, Filter, Bookmark, Send, Loader2, Globe, Clock, DollarSign, Star, Briefcase, ArrowUpDown } from "lucide-react";
+import { Search, Filter, Bookmark, Send, Loader2, Globe, Clock, DollarSign, Star, Briefcase, ArrowUpDown, Zap } from "lucide-react";
 import { timeAgo, truncate } from "@/lib/utils";
 import type { Job } from "@/lib/rss";
 
@@ -11,6 +11,14 @@ type FilterState = {
   jobType: string; country: string; showFilters: boolean;
 };
 
+type JobSource = "RemoteOK" | "WeWorkRemotely" | "Sample";
+
+const sourceColors: Record<JobSource, string> = {
+  RemoteOK: "bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-400 border-purple-300 dark:border-purple-500/40",
+  WeWorkRemotely: "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-400 border-blue-300 dark:border-blue-500/40",
+  Sample: "bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400 border-gray-300 dark:border-gray-500/40",
+};
+
 export default function JobsPage() {
   const { profile, savedJobs, scoreCache, saveJob, removeJob, setScoreCache, addActivity } = useStore();
   const [query, setQuery] = useState("");
@@ -18,6 +26,7 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(false);
   const [scoring, setScoring] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>("relevance");
+  const [sources, setSources] = useState<JobSource[]>([]);
   const [filters, setFilters] = useState<FilterState>({
     category: "", budgetMin: "", budgetMax: "", experience: "", jobType: "", country: "", showFilters: false,
   });
@@ -25,12 +34,15 @@ export default function JobsPage() {
   const searchJobs = useCallback(async () => {
     if (!query.trim()) return;
     setLoading(true);
+    setSources([]);
     try {
       const res = await fetch(`/api/jobs?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       setJobs(data.jobs || []);
-      addActivity({ type: "search", message: `Searched for "${query}" — found ${data.jobs?.length || 0} jobs` });
-    } catch { setJobs([]); }
+      setSources(data.sources || []);
+      const sourceInfo = data.sources?.length > 0 ? ` from ${data.sources.join(", ")}` : "";
+      addActivity({ type: "search", message: `Searched for "${query}" — found ${data.jobs?.length || 0} jobs${sourceInfo}` });
+    } catch { setJobs([]); setSources([]); }
     setLoading(false);
   }, [query, addActivity]);
 
@@ -117,9 +129,20 @@ export default function JobsPage() {
       </div>
 
       {jobs.length > 0 && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <span className="text-sm font-bold text-gray-500">{filtered.length} jobs found</span>
+            {sources.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Zap size={12} className="text-green-500" />
+                <span className="text-xs text-gray-500">from</span>
+                {sources.map(src => (
+                  <span key={src} className={`text-xs px-2 py-0.5 font-bold border ${sourceColors[src]}`}>
+                    {src}
+                  </span>
+                ))}
+              </div>
+            )}
             {profile && (
               <button onClick={scoreAllJobs} disabled={scoring} className="btn-secondary text-sm flex items-center gap-2 !py-1.5 !px-3">
                 {scoring ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />} AI Score All
@@ -141,7 +164,7 @@ export default function JobsPage() {
         <div className="card text-center py-16">
           <Search size={40} className="mx-auto mb-4 text-gray-300 dark:text-gray-600" />
           <h3 className="text-lg font-bold mb-2">Start Your Vibe Scan</h3>
-          <p className="text-sm text-gray-500 max-w-md mx-auto">Describe your ideal job above. Our AI will search Upwork and score every job by how well it matches your profile.</p>
+          <p className="text-sm text-gray-500 max-w-md mx-auto">Describe your ideal job above. We&apos;ll search RemoteOK and WeWorkRemotely for matching jobs, then AI scores them by how well they fit your profile.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -165,11 +188,16 @@ export default function JobsPage() {
                       {job.skills.slice(0,6).map(s => <span key={s} className="text-xs px-2.5 py-1 border-2 border-black/20 dark:border-green-500/30 font-bold bg-gray-50 dark:bg-white/5">{s}</span>)}
                       {job.skills.length > 6 && <span className="text-xs text-gray-500 font-bold">+{job.skills.length-6}</span>}
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500 font-medium">
+                    <div className="flex items-center gap-4 text-xs text-gray-500 font-medium flex-wrap">
                       <span className="flex items-center gap-1"><DollarSign size={12} />{job.budget}</span>
                       <span className="flex items-center gap-1"><Briefcase size={12} />{job.jobType}</span>
                       <span className="flex items-center gap-1"><Globe size={12} />{job.clientCountry}</span>
                       <span className="flex items-center gap-1"><Clock size={12} />{timeAgo(job.pubDate)}</span>
+                      {job.source && (
+                        <span className={`px-2 py-0.5 border text-[10px] font-bold ${sourceColors[job.source as JobSource] || sourceColors.Sample}`}>
+                          {job.source}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 shrink-0">
