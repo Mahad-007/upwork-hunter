@@ -9,7 +9,7 @@ Build a complete AI-powered Upwork job hunting web application. Deploy to Vercel
 - Push commits as you go
 
 ## GEMINI API KEY
-AIzaSyBk90BG6BYGYiW08kKwTrEsiAxrsJ9cp-M
+Set in web/.env file (see web/.env.example)
 
 ## TECH STACK
 - Next.js 14 (App Router)
