@@ -50,7 +50,7 @@ const pricing = [
 
 const faqs = [
   { q: "How does the AI job matching work?", a: "Our AI uses your profile, skills, and preferences to score every job 0-100. It understands context beyond simple keywords — describe your ideal job in plain English and it finds matches." },
-  { q: "Is my Upwork account safe?", a: "Absolutely. We only read public RSS job feeds. We never access your Upwork account directly or store any credentials." },
+  { q: "Is my data safe?", a: "Absolutely. We never store sensitive credentials. Your profile and saved jobs are stored locally in your browser. Job data is fetched from public APIs (RemoteOK, WeWorkRemotely)." },
   { q: "Can I edit AI-generated proposals?", a: "Yes! Every proposal is fully editable. The AI gives you a strong starting point that you can customize before sending." },
   { q: "What AI model do you use?", a: "We use Google's Gemini AI for intelligent job scoring and proposal generation. It's fast, accurate, and continuously improving." },
   { q: "Is there a free plan?", a: "Yes! Our free tier includes 50 job scans and 10 AI proposals per month. No credit card required." },
@@ -68,7 +68,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 bg-green-500 border-2 border-black flex items-center justify-center" style={{ boxShadow: "2px 2px 0px black" }}>
               <Zap size={16} className="text-black" />
             </div>
-            <span className="text-lg font-bold">Upwork Hunter</span>
+            <span className="text-lg font-bold">FreelanceFlow</span>
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm font-bold">
             <a href="#features" className="hover:text-green-600 transition-colors">Features</a>
@@ -87,7 +87,7 @@ export default function LandingPage() {
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-green-200 dark:bg-green-500/20 border-2 border-black dark:border-green-500/40 text-sm font-bold mb-8 animate-fade-in-up" style={{ boxShadow: "3px 3px 0px black" }}>
-            <Zap size={14} /> AI-Powered Upwork Automation
+            <Zap size={14} /> Multi-Platform Freelance Automation
           </div>
           <h1 className="text-5xl md:text-7xl font-bold leading-[1.1] mb-6 animate-fade-in-up">
             Win More Clients<br />
@@ -125,7 +125,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Everything You Need to{" "}
-              <span className="bg-green-400 dark:bg-green-500 text-black px-2 border-2 border-black" style={{ boxShadow: "3px 3px 0px black" }}>Dominate Upwork</span>
+              <span className="bg-green-400 dark:bg-green-500 text-black px-2 border-2 border-black" style={{ boxShadow: "3px 3px 0px black" }}>Dominate Freelancing</span>
             </h2>
             <p className="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto font-medium">Powerful AI tools that automate your entire bidding workflow.</p>
           </div>
@@ -175,7 +175,7 @@ export default function LandingPage() {
           </div>
           <div className="card !p-0 overflow-hidden">
             <div className="grid grid-cols-3 gap-0 text-sm font-bold bg-gray-100 dark:bg-[#1a1a1a] border-b-2 border-black dark:border-green-500/40 px-6 py-4">
-              <div>Feature</div><div className="text-center text-red-600 dark:text-red-400">Manual</div><div className="text-center text-green-600 dark:text-green-400">Upwork Hunter</div>
+              <div>Feature</div><div className="text-center text-red-600 dark:text-red-400">Manual</div><div className="text-center text-green-600 dark:text-green-400">FreelanceFlow</div>
             </div>
             {comparison.map(({ feature, manual, ai }) => (
               <div key={feature} className="grid grid-cols-3 gap-0 text-sm px-6 py-3.5 border-b-2 border-black/10 dark:border-green-500/10 last:border-0 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
@@ -260,7 +260,7 @@ export default function LandingPage() {
           <h2 className="text-3xl md:text-5xl font-bold mb-6">Ready to{" "}
             <span className="bg-green-400 dark:bg-green-500 text-black px-2 border-2 border-black" style={{ boxShadow: "3px 3px 0px black" }}>Win More Clients?</span>
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-8 text-lg font-medium">Join thousands of freelancers who automated their Upwork workflow.</p>
+          <p className="text-gray-600 dark:text-gray-400 mb-8 text-lg font-medium">Join thousands of freelancers who automated their freelance workflow.</p>
           <Link href="/dashboard" className="btn-primary text-lg inline-flex items-center gap-2">Get Started Free <ArrowRight size={20} /></Link>
         </div>
       </section>
@@ -272,14 +272,14 @@ export default function LandingPage() {
             <div className="w-8 h-8 bg-green-500 border-2 border-black flex items-center justify-center" style={{ boxShadow: "2px 2px 0px black" }}>
               <Zap size={16} className="text-black" />
             </div>
-            <span className="font-bold">Upwork Hunter</span>
+            <span className="font-bold">FreelanceFlow</span>
           </div>
           <div className="flex items-center gap-6 text-sm font-bold">
             <a href="#features" className="hover:text-green-600 transition-colors">Features</a>
             <a href="#pricing" className="hover:text-green-600 transition-colors">Pricing</a>
             <a href="#faq" className="hover:text-green-600 transition-colors">FAQ</a>
           </div>
-          <div className="text-sm text-gray-500 font-medium">&copy; 2024 Upwork Hunter. All rights reserved.</div>
+          <div className="text-sm text-gray-500 font-medium">&copy; 2024 FreelanceFlow. All rights reserved.</div>
         </div>
       </footer>
     </div>

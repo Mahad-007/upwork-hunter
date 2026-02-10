@@ -8,7 +8,7 @@ export async function scoreJobs(
 ) {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-  const prompt = `You are an Upwork job matching expert. Score each job 0-100 based on how well it matches this freelancer profile.
+  const prompt = `You are a freelance job matching expert. Score each job 0-100 based on how well it matches this freelancer profile.
 
 PROFILE:
 - Name: ${profile.name}
@@ -40,7 +40,7 @@ export async function generateProposal(
 ) {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-  const prompt = `Write a professional, compelling Upwork proposal for this job. Be specific, reference the job requirements, and show relevant experience.
+  const prompt = `Write a professional, compelling freelance proposal for this job. Be specific, reference the job requirements, and show relevant experience.
 
 JOB:
 Title: ${job.title}

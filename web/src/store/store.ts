@@ -95,7 +95,7 @@ interface AppState {
   loadFromStorage: () => void;
 }
 
-const STORAGE_KEY = "upwork-hunter-state";
+const STORAGE_KEY = "freelanceflow-state";
 
 function persist(state: Partial<AppState>) {
   if (typeof window === "undefined") return;

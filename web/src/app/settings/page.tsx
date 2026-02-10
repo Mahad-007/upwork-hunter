@@ -14,7 +14,7 @@ export default function SettingsPage() {
     const data = { savedJobs, proposals, scoreCache, settings, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "upwork-hunter-data.json"; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = "freelanceflow-data.json"; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -22,7 +22,7 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div><h1 className="text-3xl font-bold mb-1">Settings</h1><p className="text-gray-600 dark:text-gray-400 font-medium">Configure your Upwork Hunter experience.</p></div>
+      <div><h1 className="text-3xl font-bold mb-1">Settings</h1><p className="text-gray-600 dark:text-gray-400 font-medium">Configure your FreelanceFlow experience.</p></div>
 
       <div className="card">
         <div className="flex items-center gap-3 mb-4">

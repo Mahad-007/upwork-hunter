@@ -33,7 +33,7 @@ export default function Sidebar() {
             <div className="w-9 h-9 bg-green-500 border-2 border-black flex items-center justify-center" style={{ boxShadow: "2px 2px 0px black" }}>
               <Zap size={18} className="text-black" />
             </div>
-            <span className="text-lg font-bold">Upwork Hunter</span>
+            <span className="text-lg font-bold">FreelanceFlow</span>
           </Link>
           <button onClick={() => setOpen(false)} className="lg:hidden"><X size={20} /></button>
         </div>

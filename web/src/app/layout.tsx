@@ -6,8 +6,8 @@ import AppShell from "@/components/AppShell";
 const font = Space_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
 export const metadata: Metadata = {
-  title: "Upwork Hunter — AI-Powered Upwork Automation",
-  description: "AI-powered Upwork job hunting, proposal generation, and bidding automation. Find better jobs, win more clients.",
+  title: "FreelanceFlow — Multi-Platform Freelance Automation",
+  description: "AI-powered job hunting across RemoteOK, WeWorkRemotely, and more. Find better freelance jobs, generate proposals, and win more clients.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
